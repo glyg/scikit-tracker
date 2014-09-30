@@ -77,13 +77,79 @@ def brownian_trajectories_generator(n_part=5,
     trajs['t'] = trajs.index.get_level_values('t_stamp').values.astype(np.float)
     return trajs
 
+def index_generator(n_part=5, n_times=100):
+    """generates a full index for a corresponding :class:`Trajectories` with `n_parts` particles
+    and `n_times` time stamps.
+
+    Parameters
+    ----------
+
+    n_part: int
+        the number of particles in the output index
+    n_times: int
+        the number of time stamps in the output index
+
+    Returns
+    -------
+
+    index: a :class:`pandas.MultiIndex` with two index named `t_stamp` and `label`
+
+    Example
+    -------
+    >>> index = data.index_generator(3, 4)
+    >>> print(index)
+        t_stamp  label
+        0        0
+                 1
+                 2
+                 3
+        1        0
+                 1
+                 2
+                 3
+        2        0
+                 1
+                 2
+                 3
+    """
+
+    time_stamps, labels = np.mgrid[:n_times, :n_part]
+
+    return pd.MultiIndex.from_arrays([time_stamps.ravel(),
+                                      labels.ravel()],
+                                      names=('t_stamp', 'label'))
+
+def straight_trajectories_generator(n_part=5,
+                                    n_times=100,
+                                    noise=0,
+                                    seed=None, shuffle=True):
+    """
+    return straight trajectories
+    """
+    if seed is not None:
+        np.random.seed(seed)
+
+    one_traj = np.repeat(np.arange(n_times), 3).reshape(n_times, 3)
+    all_trajs = np.repeat(one_traj, n_part, axis=0)
+    if noise > 0:
+        pos_err = np.random.normal(0, noise, all_trajs.shape)
+        all_trajs += pos_err
+    trajs = pd.DataFrame(all_trajs, columns=['x', 'y', 'z'],
+                         index=index_generator(n_part, n_times))
+    if shuffle:
+        trajs['true_label'] = trajs.index.get_level_values('label')
+        grouped = trajs.groupby(level='t_stamp')
+        trajs = grouped.apply(_shuffle)
+
+    trajs['t'] = trajs.index.get_level_values('t_stamp').values.astype(np.float)
+    return trajs
 
 def directed_trajectories_generator(n_part=5,
                                     n_times=100,
                                     noise=1e-10,
                                     p_disapear=1e-10,
                                     sampling=100,
-                                    seed=None):
+                                    seed=None, shuffle=True):
     """Build and return fake directed trajectories with x, y, z and t features.
 
     Parameters
@@ -164,11 +230,10 @@ def directed_trajectories_generator(n_part=5,
     disapear = np.where(disapear == 1)[::-1][0]
     if disapear.size > 0:
         trajs = trajs.drop(trajs.index[disapear])
-
-    trajs['true_label'] = trajs.index.get_level_values('label')
-
-    grouped = trajs.groupby(level='t_stamp')
-    trajs = grouped.apply(_shuffle)
+    if shuffle:
+        trajs['true_label'] = trajs.index.get_level_values('label')
+        grouped = trajs.groupby(level='t_stamp')
+        trajs = grouped.apply(_shuffle)
 
     trajs['t'] = trajs.index.get_level_values('t_stamp').values.astype(np.float)
 
